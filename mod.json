@@ -1,0 +1,10 @@
+{
+  "name": "Disney Infinity Portal",
+  "version": "1.0.0",
+  "minLoaderVersion": "0.2.0",
+  "author": "Lucas Lhomme",
+  "description": "Support complet du portail Disney Infinity physique (Xbox 360, Xbox One, PS3/PS4, Wii U, PC) et émulation du lecteur virtuel.",
+  "entry": "portal.lua",
+  "loadAfter": ["local.crabemenu"]
+}
+

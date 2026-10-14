@@ -1,0 +1,6 @@
+# DisneyInfinityPortal .gitignore
+AUDIT.md
+STATUS.md
+*.tmp
+*.log
+
