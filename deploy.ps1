@@ -1,40 +1,27 @@
 $ErrorActionPreference = "Stop"
 
 $gameDir = "D:\SteamLibrary\steamapps\common\Disney Infinity 3.0 Gold Edition"
-$modsTarget = Join-Path $gameDir "mods"
-$destModDir = Join-Path $modsTarget "disneyinfinityportal"
-$srcDir = $PSScriptRoot
+$destModDir = Join-Path $gameDir "mods\disneyinfinityportal"
+$files = "mod.json", "portal.lua", "figure_progress.lua"
 
 if (!(Test-Path $gameDir)) {
-    Write-Error "Dossier du jeu non trouve : $gameDir"
+    Write-Error "Game folder not found: $gameDir"
     exit 1
 }
 
-# 1. Create target directories
-if (!(Test-Path $modsTarget)) { New-Item -ItemType Directory -Force -Path $modsTarget | Out-Null }
-if (!(Test-Path $destModDir)) { New-Item -ItemType Directory -Force -Path $destModDir | Out-Null }
-
-# 2. Copy mod files
-Copy-Item -Path "$srcDir\mod.json" -Destination "$destModDir\mod.json" -Force
-Write-Host "[OK] mod.json -> $destModDir" -ForegroundColor Green
-
-foreach ($file in "portal.lua", "figure_progress.lua", "figure_skills.lua") {
-    Copy-Item -Path "$srcDir\$file" -Destination "$destModDir\$file" -Force
+New-Item -ItemType Directory -Force -Path $destModDir | Out-Null
+foreach ($file in $files) {
+    $bytes = [System.IO.File]::ReadAllBytes((Join-Path $PSScriptRoot $file))
+    if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+        $bytes = $bytes[3..($bytes.Length - 1)]
+    }
+    [System.IO.File]::WriteAllBytes((Join-Path $destModDir $file), $bytes)
     Write-Host "[OK] $file -> $destModDir" -ForegroundColor Green
 }
 
-# 3. Strip BOM from deployed Lua files to prevent syntax error in Lua 5.1
-python -c "
-from pathlib import Path
-mod_dir = Path(r'$destModDir')
-for f in mod_dir.rglob('*.lua'):
-    try:
-        data = f.read_bytes()
-        if data.startswith(b'\xef\xbb\xbf'):
-            f.write_bytes(data[3:])
-    except Exception:
-        pass
-"
+Get-ChildItem $destModDir -File | Where-Object { $files -notcontains $_.Name } | ForEach-Object {
+    Remove-Item $_.FullName
+    Write-Host "[OK] removed stale $($_.Name)" -ForegroundColor Yellow
+}
 
-Write-Host "[OK] Deploiement DisneyInfinityPortal termine avec succes !" -ForegroundColor Cyan
-
+Write-Host "[OK] DisneyInfinityPortal deployed." -ForegroundColor Cyan
