@@ -20,6 +20,7 @@ You put a figure on the base and you play that character with **the figure's own
   - Every write is read back and checked.
   - Only the experience and skill blocks are ever written. The figure's identity and owner data are never touched.
   - A reset requested by the game is never copied to the figure.
+- **Playset pieces:** a piece on the hexagon enters the game's registry on the playset slot, as on console. The game decides what it accepts: a Disney Infinity 2.0 piece gets the game's own "not compatible with this version" message.
 - **LEDs:** each player slot lights up when a figure is on it, and the menu has LED tests.
 - **Virtual figures:** place any character on a slot from the menu, no base needed.
 
@@ -77,7 +78,8 @@ Everything the mod does is logged to `loader.log` in the game folder, prefixed `
 |---|---|
 | Xbox One base: connection, authentication, figure detection | Works in game |
 | Reading a figure's progression | Works |
-| One progression per figure inside the game | New; being tested |
+| One progression per figure inside the game | Works in game |
+| Playset pieces on the hexagon | Reach the game; 2.0 pieces are refused by the game itself, 3.0 pieces untested |
 | Saving to figures | Written, verified against a simulated figure; off by default until tested on hardware |
 | Xbox 360 and HID bases | Untested (no hardware yet) |
 

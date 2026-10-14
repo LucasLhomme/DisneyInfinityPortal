@@ -84,11 +84,15 @@ function FigureProgress.place(slot, sku, uid, progress, log)
 end
 
 -- Removes the figure of a slot from the engine and gives Player 1 back to the virtual reader.
+-- A figure this script no longer knows, because the game reloaded it, is still removed by the UID it is given.
 -- A save the game made but that was not written yet is reported as lost.
-function FigureProgress.remove(slot)
-    local uid = uidBySlot[slot]
-    local entry = uid and figures[uid]
-    if not entry then return end
+function FigureProgress.remove(slot, uid)
+    uid = uidBySlot[slot] or uid
+    local entry = uid and uid ~= "" and figures[uid]
+    if not entry then
+        if uid and uid ~= "" then Crabe.Gateway.removeTag(uid) end
+        return
+    end
     if entry.pending then
         entry.log("figure removed before its save was written: " .. describe(entry.pending) .. " lost")
     end

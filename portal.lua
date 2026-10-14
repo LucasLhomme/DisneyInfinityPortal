@@ -14,6 +14,9 @@ local SLOT_COLORS = {
     [3] = { 255, 215, 0 },
 }
 local SLOT_NAMES = { [1] = "Player 1", [2] = "Player 2", [3] = "Hexagon" }
+local PLAYSET_ANTENNA = 2
+
+local playsetUid = nil
 
 -- Writes one line to the overlay and loader.log, tagged with the mod name.
 local function logMsg(msg)
@@ -33,9 +36,33 @@ local function characterName(sku)
     return "SKU #" .. tostring(sku)
 end
 
--- A figure was placed: light its slot and, on a player slot, make it the played character.
--- A physical figure enters the game's registry under its own UID, so it keeps its own progression.
--- A virtual figure, or a physical one when CrabeLoader lacks that bridge, only picks the character.
+-- Adds a physical playset piece to the game's registry on the playset antenna.
+-- The game then unlocks that playset and offers it, as it does on console.
+-- A piece already there is removed first, since the registry holds one playset at a time.
+local function addPlayset(sku, uid)
+    if playsetUid then Crabe.Gateway.removeTag(playsetUid) end
+    playsetUid = nil
+    if Crabe.Gateway.addTag(uid, sku, PLAYSET_ANTENNA) then
+        playsetUid = uid
+        logMsg("playset piece " .. uid .. " added to the game's registry")
+    else
+        logMsg("playset piece " .. uid .. " REFUSED by the game's registry")
+    end
+end
+
+-- Removes the playset piece of the hexagon from the game's registry, by the UID the base reports.
+-- A piece this script no longer knows, because the game reloaded it, is removed all the same.
+local function removePlayset(uid)
+    uid = playsetUid or uid
+    playsetUid = nil
+    if not uid or uid == "" then return end
+    Crabe.Gateway.removeTag(uid)
+    logMsg("playset piece " .. uid .. " removed from the game's registry")
+end
+
+-- A figure was placed: light its slot, then enter it in the game's registry under its own UID.
+-- A player figure keeps its own progression and a playset piece on the hexagon unlocks its playset.
+-- A virtual figure, or any figure when CrabeLoader lacks the registry bridge, only picks the character.
 function PortalMod.onPlaced(slot, sku, uid, progress)
     logMsg(string.format("figure placed on %s: %s (SKU %s, UID %s)",
         SLOT_NAMES[slot] or tostring(slot), characterName(sku), tostring(sku), uid ~= "" and uid or "virtual"))
@@ -47,6 +74,8 @@ function PortalMod.onPlaced(slot, sku, uid, progress)
             return
         end
         Game.SetCharacter(sku, "loadout", slot)
+    elseif slot == 3 and uid ~= "" and sku and sku > 0 and FigureProgress.isAvailable() then
+        addPlayset(sku, uid)
     end
 end
 
@@ -54,7 +83,11 @@ end
 function PortalMod.onRemoved(slot, uid)
     logMsg("figure removed from " .. (SLOT_NAMES[slot] or tostring(slot)))
     Crabe.Portal.setLed(slot, 0, 0, 0)
-    if slot == 1 or slot == 2 then FigureProgress.remove(slot) end
+    if slot == 1 or slot == 2 then
+        FigureProgress.remove(slot, uid)
+    elseif slot == 3 then
+        removePlayset(uid)
+    end
 end
 
 -- Progression suffix of a slot for the status line, empty when the slot holds no physical figure.
