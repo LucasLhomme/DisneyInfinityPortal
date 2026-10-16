@@ -1,7 +1,7 @@
 {
   "name": "Disney Infinity Portal",
   "version": "1.0.0",
-  "minLoaderVersion": "0.2.0",
+  "minLoaderVersion": "1.1.0",
   "author": "Lucas Lhomme",
   "description": "Physical Disney Infinity base support (Xbox One, Xbox 360, PS3/PS4/Wii/Wii U/PC) with per-figure progression, plus virtual figures.",
   "entry": "portal.lua",

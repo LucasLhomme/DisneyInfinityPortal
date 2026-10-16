@@ -1,0 +1,143 @@
+name: CI - Package & Release
+
+on:
+  push:
+    branches:
+      - main
+      - "feature/**"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Package DisneyInfinityPortal
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.manifest.outputs.version }}
+      tag: ${{ steps.manifest.outputs.tag }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Check Lua syntax (Lua 5.1, the game's engine)
+        run: |
+          sudo apt-get install -y --no-install-recommends lua5.1
+          find . -name '*.lua' -not -path './.git/*' -print0 | xargs -0 -n1 luac5.1 -p
+
+      - name: Read mod.json
+        id: manifest
+        run: |
+          VER=$(python3 -c 'import json; print(json.load(open("mod.json", encoding="utf-8"))["version"])')
+          ENTRY=$(python3 -c 'import json; print(json.load(open("mod.json", encoding="utf-8"))["entry"])')
+          if [[ ! "${VER}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::mod.json version must look like 1.2.3, found '${VER}'."
+            exit 1
+          fi
+          if [ ! -f "${ENTRY}" ]; then
+            echo "::error::mod.json entry '${ENTRY}' does not exist."
+            exit 1
+          fi
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VER}" >> "$GITHUB_OUTPUT"
+
+      - name: Build the zip
+        run: |
+          mkdir -p package/disneyinfinityportal
+          cp -r mod.json portal.lua figure_progress.lua package/disneyinfinityportal/
+          find package -name '*.lua' -exec sed -i '1s/^\xEF\xBB\xBF//' {} +
+
+          cat > package/README.txt <<'ENDREADME'
+          Disney Infinity Portal for Disney Infinity 3.0 (Gold Edition)
+          =============================================================
+
+          Physical Disney Infinity base support with per-figure progression.
+          Requires CrabeLoader v1.1.0 or newer.
+
+          Installation:
+          Unzip the 'disneyinfinityportal' folder into the game's 'mods' folder
+          (next to DisneyInfinity3.exe), so you end up with:
+          Disney Infinity 3.0 Gold Edition/mods/disneyinfinityportal/mod.json
+          Disney Infinity 3.0 Gold Edition/mods/disneyinfinityportal/portal.lua
+          Disney Infinity 3.0 Gold Edition/mods/disneyinfinityportal/figure_progress.lua
+
+          Drivers:
+          - Xbox One / Xbox 360: WinUSB driver installed via Zadig (see README.md).
+          - PS3 / PS4 / Wii / Wii U / PC: standard USB HID, no driver required.
+          ENDREADME
+
+          ZIP="DisneyInfinityPortal-${{ steps.manifest.outputs.tag }}.zip"
+          (cd package && zip -r "../${ZIP}" .)
+          sha256sum "${ZIP}" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          unzip -l "${ZIP}" | tail -n 1
+
+      - name: Upload the zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: DisneyInfinityPortal-${{ steps.manifest.outputs.tag }}
+          path: |
+            DisneyInfinityPortal-${{ steps.manifest.outputs.tag }}.zip
+            SHA256SUMS.txt
+
+  release:
+    name: Prepare the draft release
+    needs: package
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: release
+      cancel-in-progress: false
+
+    steps:
+      - name: Download the zip
+        uses: actions/download-artifact@v4
+        with:
+          name: DisneyInfinityPortal-${{ needs.package.outputs.tag }}
+
+      - name: Look for an existing published release
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ needs.package.outputs.tag }}"
+          PUBLISHED=$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq "[.[] | select(.tag_name == \"${TAG}\" and (.draft | not))] | length")
+          if [[ "${PUBLISHED}" != "0" ]]; then
+            echo "::notice::${TAG} is already published. Bump the version in mod.json to release a new one."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Prepare GitHub Release (draft)
+        if: steps.decide.outputs.release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.package.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: DisneyInfinityPortal ${{ needs.package.outputs.tag }}
+          draft: true
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ### Disney Infinity Portal ${{ needs.package.outputs.tag }}
+            Physical Disney Infinity Base (Portal of Power) support with per-figure progression for Disney Infinity 3.0: Gold Edition (PC).
+
+            *Requires **[CrabeLoader v1.1.0+](https://github.com/LucasLhomme/CrabeLoader/releases/tag/v1.1.0)**.*
+
+            #### Installation
+            Unzip the `disneyinfinityportal` folder into your game's `mods/` directory:
+            ```text
+            <GameDirectory>\mods\disneyinfinityportal\
+            ```
+          files: |
+            DisneyInfinityPortal-${{ needs.package.outputs.tag }}.zip
+            SHA256SUMS.txt
