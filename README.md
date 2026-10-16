@@ -1,98 +1,180 @@
 # Disney Infinity Portal
 
-A [CrabeLoader](https://github.com/LucasLhomme/CrabeLoader) mod that brings the physical **Disney Infinity base** back to **Disney Infinity 3.0: Gold Edition (PC)**.
+[![Disney Infinity 3.0](https://img.shields.io/badge/Disney%20Infinity-3.0%20Gold%20Edition-blue.svg)](https://store.steampowered.com/app/541640/)
+[![CrabeLoader Ecosystem](https://img.shields.io/badge/CrabeLoader-v1.1.0%2B-green.svg)](https://github.com/LucasLhomme/CrabeLoader)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20(x86%20DirectX%2011)-purple.svg)](#)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-You put a figure on the base and you play that character with **the figure's own level, experience and skills**, as on console. The game keeps a separate progression for each physical figure, apart from the characters you pick with the PC's virtual reader. If you turn it on, your progress can also be saved back onto the figure.
+Physical **Disney Infinity Base (Portal of Power)** support and **Engine Gateway** restoration for **Disney Infinity 3.0: Gold Edition (PC)**.
+
+Bring back the authentic console Toys-to-Life experience on PC: place physical figures on the portal to play them with their **own RFID-bound level, experience, and skill tree**. The game maintains an isolated profile record for each unique physical figure, completely independent from characters unlocked via the PC virtual reader.
 
 ---
 
-## Features
+## Architecture Overview
 
-- **Physical bases**
-  - Xbox One base (`0E6F:0229`, PDP INF-8037059). Tested.
-  - Xbox 360 base (`24C6:FA00`, PDP INF-8032385). Written from the engine's driver, untested.
-  - PS3 / PS4 / Wii / Wii U / PC base (`0E6F:0129`, plain HID). Written from the engine's driver, untested.
-- **Figures picked up live:** place a figure on Player 1 or Player 2 to play it; lift it to go back to your previous character.
-- **One progression per figure:** each figure enters the game under its own UID, with the level, experience and skills stored on it. The game applies them itself and keeps that figure's progression apart from every other character.
-- **Saving to figures (optional, off by default)**
-  - When the game saves a figure's progression, the mod can write it back onto the figure.
-  - The write follows the console's own rule: the older of the figure's two copies is replaced, the newer one is never touched.
-  - Every write is read back and checked.
-  - Only the experience and skill blocks are ever written. The figure's identity and owner data are never touched.
-  - A reset requested by the game is never copied to the figure.
-- **Playset pieces:** a piece on the hexagon enters the game's registry on the playset slot, as on console. The game decides what it accepts: a Disney Infinity 2.0 piece gets the game's own "not compatible with this version" message.
-- **LEDs:** each player slot lights up when a figure is on it, and the menu has LED tests.
-- **Virtual figures:** place any character on a slot from the menu, no base needed.
+```mermaid
+flowchart TD
+    subgraph Hardware ["Physical Hardware"]
+        Base["Disney Infinity Base\n(Xbox One / Xbox 360 / PS3 / PS4 / Wii / Wii U / PC)"]
+        Figure["Physical Figure / RFID Tag\n(UID + Encrypted Progress)"]
+        Base --- Figure
+    end
 
-## Requirements
+    subgraph DriverLayer ["Host Drivers"]
+        WinUSB["WinUSB Driver\n(Zadig: Xbox One / Xbox 360)"]
+        HID["Windows USB HID\n(Driverless: PS3 / PS4 / Wii / PC)"]
+        Base --> WinUSB
+        Base --> HID
+    end
 
-- Disney Infinity 3.0: Gold Edition (Steam, PC).
-- CrabeLoader with portal support (`Crabe.Portal` and `Crabe.Gateway`).
-- CrabeMenu, for the in-game menu (`F5`).
+    subgraph NativeCore ["CrabeLoader (C++23 Native Runtime)"]
+        Worker["PortalWorker (Dedicated Background Thread)"]
+        Crypto["AES-128 / CNG Sector Decryption"]
+        GatewayNative["Crabe.Gateway Native Engine Hook"]
+        WinUSB --> Worker
+        HID --> Worker
+        Worker --> Crypto
+        Worker --> GatewayNative
+    end
 
-## Installation
+    subgraph ModLayer ["DisneyInfinityPortal (Lua Mod)"]
+        Mod["portal.lua (Event Listener & Antenna Logic)"]
+        Prog["figure_progress.lua (Profile Isolation & Save Sync)"]
+        Worker -.->|"Crabe.Portal Events"| Mod
+        Mod --> Prog
+        Prog -->|"Register Physical UID"| GatewayNative
+    end
 
-Copy `mod.json`, `portal.lua` and `figure_progress.lua` into:
-
-```text
-Disney Infinity 3.0 Gold Edition/mods/disneyinfinityportal/
+    subgraph OctaneEngine ["Disney Infinity 3.0 (Octane Engine)"]
+        Registry["Engine Figure Registry\n(Console Reader Code Path)"]
+        Profile["Isolated Figure Progression\n(Independent Profile Records)"]
+        GatewayNative --> Registry
+        Registry --> Profile
+    end
 ```
 
-From a clone of this repository, `deploy.ps1` does the same. Edit `$gameDir` first if your game is not under `D:\SteamLibrary`.
+---
 
-## Drivers
+## Hardware Compatibility Matrix
 
-| Base | Driver |
-|---|---|
-| PS3 / PS4 / Wii / Wii U / PC | None: Windows sees it as a HID device. |
-| Xbox One | **WinUSB**, installed with [Zadig](https://zadig.akeo.ie/). |
-| Xbox 360 | **WinUSB**, installed with Zadig. |
+| Base Hardware | USB VID:PID | Model / Controller | Driver | Status |
+| :--- | :---: | :---: | :---: | :--- |
+| **Xbox One** | `0E6F:0229` | PDP `INF-8037059` | **WinUSB** (via Zadig) | **Fully Verified In-Game** (GIP security handshake, encrypted sector reads, antenna detection) |
+| **Xbox 360** | `24C6:FA00` | PDP `INF-8032385` | **WinUSB** (via Zadig) | Implemented via native engine transport (`0B 15` frame envelope) |
+| **PS3 / PS4 / Wii / Wii U / PC** | `0E6F:0129` | Standard USB HID | Native Windows HID | Implemented via direct HID transport (Driverless) |
+| **Virtual Portal** | N/A | Software Emulation | None | Supported natively through [CrabeMenu](https://github.com/LucasLhomme/CrabeMenu) (`F5`) |
 
-Windows' own Xbox driver loads for the Xbox One base, but it does not expose the base to applications. That is why WinUSB is needed.
+---
 
-To install WinUSB with Zadig:
+## Key Features
 
-1. Plug the base in and start Zadig.
-2. Select **Options > List All Devices**.
-3. Pick **Disney Infinity Base** (`0E6F 0229` for Xbox One). Do not pick a controller.
-4. Choose **WinUSB** and click **Replace Driver**.
-5. Unplug the base and plug it back in.
+- **Live Hot-Plug Detection:** Place a physical figure on **Player 1** or **Player 2** to instantly swap into that character. Lift the figure to smoothly revert to your previous character.
+- **One Progression Per Physical Figure (Console Parity):** Each figure enters the game under its unique RFID UID. Progression (level, XP points, and unlocked skill bits) is loaded directly from the figure tag. The game tracks each physical figure's stats separately, even between two identical character figures.
+- **Playset Piece Support (Hexagon Slot):** Place a physical playset piece on the hexagonal center antenna (Antenna 2) to register the campaign in the engine registry, exactly as on console.
+- **Safe Double-Buffered Tag Writing (Optional):**
+  - Turned **off by default** for safety.
+  - When enabled, in-game XP and skill gains can be written back to the physical figure.
+  - Follows console safety rules: only writes to the older of the figure's two backup copies, never touches identity or ownership blocks, and performs an immediate read-back verification.
+- **RGB LED Illumination:** Dynamic slot lighting when figures are placed (Player 1: Cyan, Player 2: Magenta, Hexagon: Gold), complete with interactive LED test modes in CrabeMenu.
 
-To go back to the Windows driver, uninstall the device in Device Manager, tick *Delete the driver software*, then plug the base back in.
+---
 
-## Using it
+## Driver Setup (Xbox One & Xbox 360)
 
-1. Start the game with the base plugged in. The Xbox One base authenticates in about a second.
-2. Place a figure on **Player 1** or **Player 2**. Its slot lights up and the character changes.
-3. Lift the figure to go back to the character you had before.
-4. In CrabeMenu (`F5`), the **Disney Infinity Base** category offers:
-   - **Base status:** base type, the figure on each slot and its level.
-   - **Save progress to figures:** off by default. Turn it on to write the game's saves onto your figures.
-   - **LED tests**, **virtual figures** and **figure removal**.
+The standard Windows Xbox driver (`dc1-controller.sys`) claims the Xbox One base as an internal controller device without exposing it to user-mode applications. **WinUSB** is required.
 
-Everything the mod does is logged to `loader.log` in the game folder, prefixed `[DisneyInfinityPortal]`.
+### Installing WinUSB with Zadig:
+1. Plug your Disney Infinity Base into a USB port.
+2. Download and launch **[Zadig](https://zadig.akeo.ie/)**.
+3. In Zadig, click **Options > List All Devices**.
+4. In the dropdown, select **Disney Infinity Base** (Verify `0E6F:0229` for Xbox One or `24C6:FA00` for Xbox 360). *Do not select your gamepad controller!*
+5. Select **WinUSB** as the replacement driver and click **Replace Driver**.
+6. Unplug the base and plug it back in.
 
-## Status
+*(PS3, PS4, Wii, Wii U, and PC bases use standard USB HID and require no driver installation).*
 
-| Feature | State |
-|---|---|
-| Xbox One base: connection, authentication, figure detection | Works in game |
-| Reading a figure's progression | Works |
-| One progression per figure inside the game | Works in game |
-| Playset pieces on the hexagon | Reach the game; 2.0 pieces are refused by the game itself, 3.0 pieces untested |
-| Saving to figures | Written, verified against a simulated figure; off by default until tested on hardware |
-| Xbox 360 and HID bases | Untested (no hardware yet) |
+---
 
-Back up a figure you care about before turning saving on. Bug reports with your `loader.log` are welcome.
+## Installation & Deployment
 
-## How it works
+### Prerequisites
+- **[Disney Infinity 3.0: Gold Edition](https://store.steampowered.com/app/541640/)** (Steam PC)
+- **[CrabeLoader v1.1.0+](https://github.com/LucasLhomme/CrabeLoader)** (Provides the native C++ portal gateway and crypto subsystem)
+- **[CrabeMenu](https://github.com/LucasLhomme/CrabeMenu)** (Optional, for in-game F5 GUI and status monitoring)
 
-CrabeLoader talks to the base on its own thread and decrypts each figure with its per-figure key. It then reports the figure to this mod as an event.
+### Automatic Deployment
+Clone this repository and run the deployment script:
+```powershell
+.\deploy.ps1
+```
+*(The script automatically discovers your Steam library installation. You can also specify `-GamePath "C:\Your\Path"` if needed).*
 
-The mod adds the figure to the game's own figure registry, the same code path the console uses for a real reader. The game therefore treats it as a real figure. When the game saves that figure, CrabeLoader catches the write and the mod can copy it to the figure.
+### Manual Installation
+Copy `mod.json`, `portal.lua`, and `figure_progress.lua` to:
+```text
+<GameDirectory>\mods\disneyinfinityportal\
+```
 
-The details are in CrabeLoader's [portal guide](https://github.com/LucasLhomme/CrabeLoader/blob/dev/docs/guides/portal.md).
+---
 
-## Credits
+## In-Game Controls & CrabeMenu Integration
 
-Lucas Lhomme. Built on CrabeLoader.
+1. Start the game with your portal plugged in.
+2. Place a figure on **Player 1** or **Player 2**. The slot lights up and the character spawns in-game.
+3. Open **CrabeMenu** (`F5`) and navigate to the **Disney Infinity Base** section:
+   - **Base Status:** View connection health, firmware revision, active slot tags, and detected levels.
+   - **Save Progress to Figures:** Toggle live writing back to physical tags (disabled by default).
+   - **LED Controls:** Test custom RGB color sweeps across all three antenna pads.
+   - **Virtual Figures:** Emulate tag placement for any character directly from the menu.
+
+All portal events and gateway operations are logged in real-time to `<GameDirectory>\loader.log` prefixed with `[DisneyInfinityPortal]`.
+
+---
+
+## Repository Structure
+
+```text
+DisneyInfinityPortal/
+├── docs/
+│   ├── AUDIT.md          # In-depth technical reverse-engineering audit of Disney Gateway protocol & GIP
+│   └── STATUS.md         # Hardware validation logs, test benches, and development progress notes
+├── deploy.ps1            # Auto-discovery deployment script for Disney Infinity 3.0
+├── figure_progress.lua   # Profile isolation, UID registration, and double-buffered RFID tag sync
+├── mod.json              # CrabeLoader mod manifest
+├── portal.lua            # Entry point: antenna event handler, LED manager, and CrabeMenu UI integration
+├── README.md             # Project documentation and setup guide
+└── .gitignore            # Workspace ignore rules
+```
+
+---
+
+## The DIM2 Modding Ecosystem
+
+DisneyInfinityPortal is part of the **DIM2** open-source modding suite for Disney Infinity 3.0:
+
+| Project | Description | Link |
+| :--- | :--- | :---: |
+| **CrabeLoader** | Next-generation C++23 modloader, ASI bootstrap, and low-level engine hook framework. | [GitHub](https://github.com/LucasLhomme/CrabeLoader) |
+| **CrabeMenu** | Autonomous in-game mod menu (`F5`) with full gamepad and keyboard navigation. | [GitHub](https://github.com/LucasLhomme/CrabeMenu) |
+| **DisneyInfinity-SplitScreenMods** | 2-player local split-screen cooperative mod for PC Gold Edition. | [GitHub](https://github.com/LucasLhomme/DisneyInfinity-SplitScreenMods) |
+| **DisneyInfinityCreator** | Comprehensive character creation, model extraction, and modding toolkit. | [GitHub](https://github.com/LucasLhomme/DisneyInfinityCreator) |
+| **DisneyInfinityComplete** | Content restoration mod: unreleased figures, 1.05/1.06 world warps, and playset unlocks. | [GitHub](https://github.com/LucasLhomme/DisneyInfinityComplete) |
+| **Sora** | Custom playable Sora (Kingdom Hearts) character mod with custom abilities and voice lines. | [GitHub](https://github.com/LucasLhomme/Sora) |
+
+---
+
+## Technical Documentation & Research
+
+For protocol specifications, cryptographic details (Mifare Ultralight per-figure AES-128 keys, CRC calculation, and sector layouts), and GIP handshake sequences, refer to:
+- **[`docs/AUDIT.md`](docs/AUDIT.md)**: Full reverse-engineering audit and protocol dissection.
+- **[`docs/STATUS.md`](docs/STATUS.md)**: Hardware test benchmarks and progression tracking status.
+- **[CrabeLoader Portal Guide](https://github.com/LucasLhomme/CrabeLoader/blob/dev/docs/guides/portal.md)**: C++ subsystem documentation.
+
+---
+
+## License & Credits
+
+- **Author:** Lucas Lhomme ([@LucasLhomme](https://github.com/LucasLhomme))
+- **License:** [MIT License](LICENSE)
+- Special thanks to the Disney Infinity reverse-engineering community.

@@ -1,6 +1,5 @@
 # DisneyInfinityPortal .gitignore
-AUDIT.md
-STATUS.md
 *.tmp
 *.log
-
+.DS_Store
+Thumbs.db
