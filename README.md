@@ -157,10 +157,7 @@ DisneyInfinityPortal is part of the **DIM2** open-source modding suite for Disne
 | :--- | :--- | :---: |
 | **CrabeLoader** | Next-generation C++23 modloader, ASI bootstrap, and low-level engine hook framework. | [GitHub](https://github.com/LucasLhomme/CrabeLoader) |
 | **CrabeMenu** | Autonomous in-game mod menu (`F5`) with full gamepad and keyboard navigation. | [GitHub](https://github.com/LucasLhomme/CrabeMenu) |
-| **DisneyInfinity-SplitScreenMods** | 2-player local split-screen cooperative mod for PC Gold Edition. | [GitHub](https://github.com/LucasLhomme/DisneyInfinity-SplitScreenMods) |
 | **DisneyInfinityCreator** | Comprehensive character creation, model extraction, and modding toolkit. | [GitHub](https://github.com/LucasLhomme/DisneyInfinityCreator) |
-| **DisneyInfinityComplete** | Content restoration mod: unreleased figures, 1.05/1.06 world warps, and playset unlocks. | [GitHub](https://github.com/LucasLhomme/DisneyInfinityComplete) |
-| **Sora** | Custom playable Sora (Kingdom Hearts) character mod with custom abilities and voice lines. | [GitHub](https://github.com/LucasLhomme/Sora) |
 
 ---
 
